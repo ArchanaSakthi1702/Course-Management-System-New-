@@ -8,7 +8,8 @@ from app.database import get_db
 from app.auth.dependencies import is_student
 from app.auth.course_access import ensure_student_enrolled
 from app.helpers.quiz_answer_evaluator import evaluate_quiz_answers
-from app.models import Quiz,QuizSubmission,User,QuizQuestion,QuizAnswer
+from app.helpers.certificate_assigner import issue_certificate_if_completed
+from app.models import Quiz,QuizSubmission,User,QuizQuestion,QuizAnswer,Course
 from app.schemas.quiz_submission import (
     QuizSubmitRequest,QuizSubmitResponse,
     QuizSubmissionDetailView,QuizQuestionResult,
@@ -95,6 +96,11 @@ async def submit_quiz(
     # --------------------------
     await db.commit()
     await db.refresh(submission)
+
+    result_course = await db.execute(select(Course).where(Course.id == quiz.course_id))
+    course = result_course.scalar_one_or_none()
+    if course and course.is_course_ended:
+        await issue_certificate_if_completed(course.id, current_user.id, db)
 
     return {
         "submission_id": submission.id,

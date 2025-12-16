@@ -8,6 +8,7 @@ from app.schemas.media import MediaLite
 from app.schemas.assignment import AssignmentLite
 from app.schemas.quiz import QuizLite
 from app.schemas.week import WeekUpdate,WeekLite
+from app.schemas.category import CategoryItem
 
 #For Teachers 
 class CourseItem(BaseModel):
@@ -19,6 +20,7 @@ class CourseItem(BaseModel):
     credits: Optional[int]
     created_at: datetime
     updated_at: datetime
+    categories: list[CategoryItem] = []
 
 
 class CourseCreate(BaseModel):
@@ -55,7 +57,8 @@ class CourseBasicItem(BaseModel):
     thumbnail: Optional[str] = None
     credits: Optional[int]
 
-    number_of_weeks: Optional[int]=None          # ⬅️ NEW
+    number_of_weeks: Optional[int]=None  
+    categories: list[CategoryItem] = [] 
 
 class StudentCoursesCursorResponse(BaseModel):
     limit: int
@@ -76,6 +79,7 @@ class CourseDetailResponse(BaseModel):
     description: Optional[str]
     credits: Optional[int]
     thumbnail: Optional[str]
+    categories:list[CategoryItem]=[]
 
     instructor_name: Optional[str]
     instructor_id: str

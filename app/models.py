@@ -48,6 +48,23 @@ class User(Base):
     super_admin = Column(Boolean, default=False)
 
 
+course_categories_association = Table(
+    "course_category_map",
+    Base.metadata,
+    Column(
+        "course_id",
+        UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        primary_key=True
+    ),
+    Column(
+        "category_id",
+        UUID(as_uuid=True),
+        ForeignKey("course_categories.id", ondelete="CASCADE"),
+        primary_key=True
+    )
+)
+
 # ---------------------------
 # Course Model
 # ---------------------------
@@ -66,6 +83,13 @@ class Course(Base):
 
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    is_course_ended = Column(Boolean, default=False)
+
+    categories = relationship(
+        "CourseCategory",
+        secondary=course_categories_association,
+        backref="courses"
+    )
 
     instructor = relationship("User", backref="courses_taught")
 
@@ -79,6 +103,16 @@ class Course(Base):
     assignments = relationship("Assignment", back_populates="course", cascade="all, delete-orphan")
     quizzes = relationship("Quiz", back_populates="course", cascade="all, delete-orphan")
     weeks = relationship("CourseWeek", back_populates="course", cascade="all, delete-orphan")
+
+
+class CourseCategory(Base):
+    __tablename__ = "course_categories"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), unique=True, nullable=False)
+    description = Column(Text, nullable=True)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
 
 
 # ---------------------------
@@ -276,3 +310,41 @@ class QuizAnswer(Base):
     submission = relationship("QuizSubmission", back_populates="answers")
     question = relationship("QuizQuestion")
     selected_option = relationship("QuizOption")
+
+
+class Certificate(Base):
+    __tablename__ = "certificates"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+
+    student_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False
+    )
+    course_id = Column(
+        UUID(as_uuid=True),
+        ForeignKey("courses.id", ondelete="CASCADE"),
+        nullable=False
+    )
+
+    certificate_number = Column(String(100), unique=True, nullable=False)
+
+    issued_at = Column(DateTime, default=datetime.utcnow)
+
+    # Optional fields
+    score = Column(Integer, nullable=True)
+    grade = Column(String(10), nullable=True)
+    pdf_url = Column(Text, nullable=True)
+
+    # Relationships
+    student = relationship("User", backref="certificates")
+    course = relationship("Course", backref="certificates")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "student_id",
+            "course_id",
+            name="unique_certificate_per_course"
+        ),
+    )

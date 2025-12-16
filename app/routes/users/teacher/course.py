@@ -6,13 +6,14 @@ from datetime import datetime
 import os
 from uuid import uuid4,UUID
 import aiofiles
-from typing import Optional
+from typing import Optional,List
 
 from app.database import get_db
-from app.models import Course, User,Media,Assignment,course_students
+from app.models import Course, User,Media,Assignment,course_students,CourseCategory
 from app.helpers.file_paths import get_thumbnail_fs_path,get_media_fs_path,THUMBNAIL_UPLOAD_DIR,delete_assignment_file_safely
 from app.helpers.progress_calculator import get_assignment_performance,get_quiz_performance
 from app.schemas.course import CourseBulkDelete,MyCoursesCursorResponse,CourseItem
+from app.schemas.category import CategoryItem
 from app.auth.dependencies import is_teacher
 
 
@@ -27,6 +28,7 @@ async def create_course(
     name:str=Form(...),
     description:Optional[str]=Form(None),
     credits:Optional[int]=Form(None),
+    category_ids: Optional[List[UUID]] = Form(None),
     thumbnail: UploadFile = File(None),
     current_user: User = Depends(is_teacher),
     db: AsyncSession = Depends(get_db),
@@ -71,6 +73,13 @@ async def create_course(
         thumbnail=thumbnail_url
     )
 
+    if category_ids:
+        result = await db.execute(
+            select(CourseCategory).where(CourseCategory.id.in_(category_ids))
+        )
+        categories = result.scalars().all()
+        new_course.categories = categories
+
     db.add(new_course)
     await db.commit()
     await db.refresh(new_course)
@@ -87,8 +96,10 @@ async def update_course(
     code: Optional[str] = Form(None),
     name: Optional[str] = Form(None),
     description: Optional[str] = Form(None),
+    category_ids: Optional[List[UUID]] = Form(None),
     credits: Optional[int] = Form(None),
     thumbnail: UploadFile = File(None),
+    is_course_ended: Optional[bool] = Form(None),
     current_user: User = Depends(is_teacher),
     db: AsyncSession = Depends(get_db),
 ):
@@ -118,6 +129,18 @@ async def update_course(
         course.description = description
     if credits is not None:
         course.credits = credits
+    if category_ids is not None:
+        if len(category_ids) == 0:
+            # 🔥 Clear all categories
+            course.categories = []
+        else:
+            result = await db.execute(
+                select(CourseCategory).where(CourseCategory.id.in_(category_ids))
+            )
+            categories = result.scalars().all()
+            course.categories = categories
+    if is_course_ended is not None:
+        course.is_course_ended = is_course_ended
 
     # Thumbnail update
     if thumbnail:
@@ -281,33 +304,36 @@ async def list_my_courses_cursor(
     Cursor-based pagination for teacher's courses.
     Ultra-fast and efficient (no OFFSET).
     """
-
+    print(f"{cursor} <-This is cursor")
     # Convert cursor string to datetime if provided
     cursor_time = None
     if cursor:
         try:
             cursor_time = datetime.fromisoformat(cursor)
+            print("For Real")
         except Exception:
             raise HTTPException(400, "Invalid cursor timestamp")
 
     # Base query
-    query = select(Course).where(
-        Course.instructor_id == current_user.id
-    )
+    query = (
+            select(Course)
+            .where(Course.instructor_id == current_user.id).
+            options(selectinload(Course.categories))
+            )
 
     # Add cursor condition (fetch older items only)
     if cursor_time:
         query = query.where(Course.created_at < cursor_time)
 
     # Order + limit (fetch 1 extra to detect next cursor)
-    query = query.order_by(Course.created_at.desc()).limit(limit + 1)
+    query = query.order_by(Course.created_at.desc()).limit(limit+1)
 
     result = await db.execute(query)
     courses = result.scalars().all()
 
     # Determine next cursor
     if len(courses) > limit:
-        next_cursor = courses[-1].created_at.isoformat()
+        next_cursor = courses[limit-1].created_at.isoformat()
         courses = courses[:limit]
     else:
         next_cursor = None
@@ -323,6 +349,12 @@ async def list_my_courses_cursor(
                 name=c.name,
                 description=c.description,
                 credits=c.credits,
+                categories=[
+                CategoryItem(
+                    id=str(cat.id),
+                    name=cat.name
+                )
+                for cat in c.categories],
                 created_at=c.created_at,
                 updated_at=c.updated_at,
                 thumbnail=c.thumbnail

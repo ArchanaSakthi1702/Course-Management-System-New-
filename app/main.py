@@ -16,6 +16,7 @@ from app.routes.users.teacher.assignment import router as teacher_assignment_rou
 from app.routes.users.teacher.assignment_submission import router as teacher_assignment_submission_router
 from app.routes.users.teacher.quiz import router as teacher_quiz_router
 from app.routes.users.teacher.quiz_submission import router as teacher_quiz_submission_router
+from app.routes.users.teacher.category import router as teacher_category_router
 
 from app.routes.users.student.course import router as student_course_router
 from app.routes.users.student.assignment_submissions import router as student_assignment_router
@@ -54,6 +55,7 @@ app.include_router(teacher_assignment_submission_router)
 app.include_router(teacher_weeks_router)
 app.include_router(teacher_quiz_router)
 app.include_router(teacher_quiz_submission_router)
+app.include_router(teacher_category_router)
 
 app.include_router(student_course_router)
 app.include_router(student_assignment_router)

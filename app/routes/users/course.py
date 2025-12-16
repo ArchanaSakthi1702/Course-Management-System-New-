@@ -8,6 +8,7 @@ from uuid import UUID
 from app.schemas.course import (
     StudentCoursesCursorResponse,CourseBasicItem,CourseDetailResponse
     )
+from app.schemas.category import CategoryItem
 from app.schemas.week import WeekLite
 from app.schemas.media import MediaLite
 from app.schemas.quiz import QuizLite
@@ -30,8 +31,14 @@ async def list_courses_cursor(
     db: AsyncSession = Depends(get_db)
 ):
     cursor_time = datetime.fromisoformat(cursor) if cursor else None
-
-    query = select(Course)
+    
+    query = (
+        select(Course)
+        .options(
+            selectinload(Course.categories)
+            )
+        )
+    
     if cursor_time:
         query = query.where(Course.created_at < cursor_time)
 
@@ -41,7 +48,7 @@ async def list_courses_cursor(
 
     # Cursor logic
     if len(courses) > limit:
-        next_cursor = courses[-1].created_at.isoformat()
+        next_cursor = courses[limit-1].created_at.isoformat()
         courses = courses[:limit]
     else:
         next_cursor = None
@@ -70,7 +77,15 @@ async def list_courses_cursor(
                 description=c.description,
                 credits=c.credits,
                 thumbnail=c.thumbnail,
-                number_of_weeks=week_count_map.get(str(c.id), 0)  # ⬅️ ADDED
+                number_of_weeks=week_count_map.get(str(c.id), 0) , # ⬅️ ADDED
+                categories=[
+                    CategoryItem(
+                        id=str(cat.id),
+                        name=cat.name
+                    )
+                    for cat in c.categories
+                ]
+                
             )
             for c in courses
         ]
@@ -97,7 +112,8 @@ async def get_course_detail(
         select(Course)
         .options(
             selectinload(Course.instructor),
-            selectinload(Course.weeks)
+            selectinload(Course.weeks),
+            selectinload(Course.categories)
         )
         .where(Course.id == course_uuid)
     )
@@ -134,6 +150,13 @@ async def get_course_detail(
             description=course.description,
             credits=course.credits,
             thumbnail=course.thumbnail,
+            categories=[
+                CategoryItem(
+                    id=str(cat.id),
+                    name=cat.name
+                )
+                for cat in course.categories
+            ],
             instructor_name=course.instructor.name if course.instructor else None,
             instructor_id=str(course.instructor_id),
             enrolled_count=enrolled_count,
@@ -227,6 +250,13 @@ async def get_course_detail(
         description=course.description,
         credits=course.credits,
         thumbnail=course.thumbnail,
+        categories=[
+                CategoryItem(
+                    id=str(cat.id),
+                    name=cat.name
+                )
+                for cat in course.categories
+            ],
         instructor_name=course.instructor.name if course.instructor else None,
         instructor_id=str(course.instructor_id),
         enrolled_count=enrolled_count,
